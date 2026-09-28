@@ -21,6 +21,14 @@
 # the non-slim bookworm image bundles ~619MB of build tooling nothing
 # here needs pre-installed; test adds its own compiler toolchain
 # explicitly instead.
+#
+# common is never pushed itself -- only used as a COPY --from source.
+# prod and test each declare their own independent FROM node:...
+# instead of `FROM common`: a *pushed* stage's own FROM can't chain to
+# another local Dockerfile stage, or kaniko produces a manifest Zot
+# rejects (MANIFEST_INVALID) on push. Confirmed directly -- this exact
+# mistake was already made and fixed once before in app-backstage's own
+# Dockerfile this same session.
 FROM node:24-trixie-slim AS common
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -37,19 +45,34 @@ COPY .yarn ./.yarn
 COPY packages/app/package.json ./packages/app/package.json
 COPY packages/backend/package.json ./packages/backend/package.json
 
-FROM common AS prod
+FROM node:24-trixie-slim AS prod
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends libsqlite3-dev && \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+RUN corepack enable
+COPY --from=common /app/package.json /app/yarn.lock /app/.yarnrc.yml /app/backstage.json ./
+COPY --from=common /app/.yarn ./.yarn
+COPY --from=common /app/packages ./packages
 # Only backend's own production deps -- app-backstage's release image
 # serves the frontend's pre-bundled static output, it never runs
 # packages/app's own React/MUI tree as live node_modules.
 RUN yarn workspaces focus backend --production
 
-FROM common AS test
-# Only test needs a compiler toolchain -- for devDependency-only native
-# modules (tree-sitter x2, ssh2/cpu-features, esbuild, @swc/core). prod
-# never sees this; it doesn't leak into the runtime base.
+FROM node:24-trixie-slim AS test
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && \
-    apt-get install -y --no-install-recommends python3 make g++ && \
+    apt-get install -y --no-install-recommends libsqlite3-dev python3 make g++ && \
     rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+RUN corepack enable
+COPY --from=common /app/package.json /app/yarn.lock /app/.yarnrc.yml /app/backstage.json ./
+COPY --from=common /app/.yarn ./.yarn
+COPY --from=common /app/packages ./packages
+# Only test needs a compiler toolchain -- for devDependency-only native
+# modules (tree-sitter x2, ssh2/cpu-features, esbuild, @swc/core). prod
+# never sees this; it doesn't leak into the runtime base.
 RUN yarn install --immutable
