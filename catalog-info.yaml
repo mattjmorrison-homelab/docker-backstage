@@ -1,0 +1,12 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: docker-backstage
+  description: Shared dependency base image for app-backstage.
+  annotations:
+    github.com/project-slug: mattjmorrison-homelab/docker-backstage
+spec:
+  type: library
+  owner: mattjmorrison-homelab
+  lifecycle: experimental
+  system: backstage
