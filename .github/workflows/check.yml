@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Validate the prod-target Dockerfile still builds
+      - name: Build and push the pr-scoped prod target
         uses: mattjmorrison-homelab/actions-k8s@bcd046d4581cc4ffce4de813396f81420ce32e30 # main
         with:
           service-account: docker-backstage-job
@@ -18,10 +18,12 @@ jobs:
           shell: "false"
           command: >-
             --context=git://github.com/mattjmorrison-homelab/docker-backstage.git#refs/heads/${{ github.head_ref }}
-            --dockerfile=Dockerfile --skip-unused-stages=true --target=prod --no-push
+            --dockerfile=Dockerfile --skip-unused-stages=true --target=prod
+            --destination=registry.morrisons.site/docker-backstage:pr-${{ github.event.pull_request.head.sha }}-prod
+          secret-volume: docker-backstage-zot-pull-secret:/kaniko/.docker
           active-deadline-seconds: "1800"
 
-      - name: Validate the test-target Dockerfile still builds
+      - name: Build and push the pr-scoped test target
         uses: mattjmorrison-homelab/actions-k8s@bcd046d4581cc4ffce4de813396f81420ce32e30 # main
         with:
           service-account: docker-backstage-job
@@ -29,5 +31,7 @@ jobs:
           shell: "false"
           command: >-
             --context=git://github.com/mattjmorrison-homelab/docker-backstage.git#refs/heads/${{ github.head_ref }}
-            --dockerfile=Dockerfile --skip-unused-stages=true --target=test --no-push
+            --dockerfile=Dockerfile --skip-unused-stages=true --target=test
+            --destination=registry.morrisons.site/docker-backstage:pr-${{ github.event.pull_request.head.sha }}-test
+          secret-volume: docker-backstage-zot-pull-secret:/kaniko/.docker
           active-deadline-seconds: "1800"
